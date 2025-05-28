@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive GenAI Chatbot Implementation Guide</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- Application Structure Plan: 
+The SPA uses a tabbed navigation interface to break down the comprehensive GenAI Chatbot guide into manageable sections.
+This structure was chosen for usability, allowing users to easily navigate to specific parts of the guide (e.g., Backend Setup, Frontend Setup, Testing) without excessive scrolling.
+Key interactions include:
+1. Tab-based navigation to switch between content sections.
+2. "Copy to Clipboard" buttons for all code snippets and commands, enhancing practical utility.
+3. Toggleable sections for lengthy content like dummy data examples, keeping the UI clean.
+4. Enhanced chat interface in the Frontend tab to include persistent chat history for the LLM, managed via a SQLite database in the backend.
+User flow: User lands on an introduction, can navigate to any section via tabs, view instructions, copy code/commands directly, and engage in multi-turn conversations with the chatbot while maintaining context within a session. A "New Chat" button allows starting a fresh session.
+This non-linear access is more user-friendly for a technical guide than a single long page.
+-->
+<!-- Visualization & Content Choices: 
+The source material is a technical guide. Traditional data visualizations (charts) are not applicable.
+Content presentation choices focus on clarity and utility:
+- Report Info: Guide sections (Prerequisites, LLM Setup, Backend, Frontend, Testing, Advanced).
+- Goal: Make technical steps easy to follow and code easy to reuse, now with persistent chat history.
+- Viz/Presentation Method:
+- Textual explanations: Structured with headings, lists, and paragraphs within each tab.
+- Code Snippets & Commands: Presented in pre-formatted blocks (`<pre><code>`) with a dark background for readability and contrast.
+- Dummy Data: Presented as expandable/collapsible sections to manage space.
+- Chat History: Displayed in the frontend chat interface, with different styling for user and bot messages, and now backed by persistent storage.
+- Interaction:
+- Tab navigation (JS).
+- Copy-to-clipboard buttons for code/commands (JS).
+- Show/hide toggles for dummy data content (JS).
+- Multi-turn chat interaction where previous messages influence the LLM's response, with session persistence (JS sending session ID and history to backend, backend using SQLite).
+- "New Chat" button to simulate starting a new conversation session.
+- Justification: These methods enhance readability and practical application of the guide's content. The chat history with persistence significantly improves the chatbot's conversational ability and user experience over multiple interactions.
+- Library/Method: Vanilla JavaScript for interactions. Tailwind CSS for styling. SQLite for local database.
+- NO SVG/Mermaid used.
+-->
+<style>
+body {
+font-family: 'Inter', sans-serif;
+}
+.tab-button {
+transition: background-color 0.3s ease, color 0.3s ease;
+}
+.tab-button.active {
+background-color: #0284c7; /* sky-600 */
+color: white;
+}
+.tab-button:not(.active) {
+background-color: #e2e8f0; /* slate-200 */
+color: #334155; /* slate-700 */
+}
+.tab-button:not(.active):hover {
+background-color: #cbd5e1; /* slate-300 */
+}
+.tab-content {
+display: none;
+}
+.tab-content.active {
+display: block;
+}
+.code-block {
+background-color: #1e293b; /* slate-800 */
+color: #f1f5f9; /* slate-100 */
+padding: 1rem;
+border-radius: 0.5rem;
+overflow-x: auto;
+position: relative;
+}
+.code-block pre {
+white-space: pre-wrap;
+word-wrap: break-word;
+}
+.copy-button {
+position: absolute;
+top: 0.5rem;
+right: 0.5rem;
+background-color: #38bdf8; /* sky-400 */
+color: white;
+padding: 0.25rem 0.5rem;
+border-radius: 0.25rem;
+font-size: 0.875rem;
+cursor: pointer;
+transition: background-color 0.2s ease;
+}
+.copy-button:hover {
+background-color: #0ea5e9; /* sky-500 */
+}
+.section-title {
+font-size: 1.5rem; /* text-2xl */
+font-weight: 600; /* font-semibold */
+color: #1e293b; /* slate-800 */
+margin-bottom: 1rem;
+padding-bottom: 0.5rem;
+border-bottom: 2px solid #e2e8f0; /* slate-200 */
+}
+.sub-section-title {
+font-size: 1.25rem; /* text-xl */
+font-weight: 600; /* font-semibold */
+color: #334155; /* slate-700 */
+margin-top: 1.5rem;
+margin-bottom: 0.75rem;
+}
+.content-card {
+background-color: white;
+padding: 1.5rem;
+border-radius: 0.75rem;
+box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+margin-bottom: 1.5rem;
+}
+.command {
+background-color: #f1f5f9; /* slate-100 */
+color: #334155; /* slate-700 */
+padding: 0.75rem;
+border-radius: 0.375rem; /* rounded-md */
+font-family: monospace;
+margin-bottom: 0.5rem;
+position: relative;
+}
+.toggle-button {
+background-color: #94a3b8; /* slate-400 */
+color: white;
+}
+.toggle-button:hover {
+background-color: #64748b; /* slate-500 */
+}
+.toast-message {
+position: fixed;
+bottom: 20px;
+left: 50%;
+transform: translateX(-50%);
+background-color: #22c55e; /* green-500 */
+color: white;
+padding: 10px 20px;
+border-radius: 5px;
+box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+z-index: 1000;
+opacity: 0;
+transition: opacity 0.5s ease-in-out;
+}
+.toast-message.show {
+opacity: 1;
+}
+.custom-scrollbar::-webkit-scrollbar {
+width: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+background: #f1f1f1;
+border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+background: #888;
+border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+background: #555;
+}
+</style>
+</head>
+<body class="bg-slate-100 text-slate-800 min-h-screen p-4 md:p-8">
+
+<div class="max-w-6xl mx-auto">
+<header class="mb-8 text-center">
+<h1 class="text-4xl font-bold text-sky-700">Interactive GenAI Chatbot Guide</h1>
+<h2 class="text-2xl font-bold text-teal-700"> (Author: AJ D) </h2>
+<p class="text-slate-600 mt-2">Your step-by-step companion to building a local GenAI Chatbot.</p>
+</header>
+
+<nav class="mb-8 flex flex-wrap justify-center gap-2" id="tab-navigation">
+<button class="tab-button active py-2 px-4 rounded-md font-medium" data-tab="introduction">Introduction</button>
+<button class="tab-button py-2 px-4 rounded-md font-medium" data-tab="prerequisites">Prerequisites</button>
+<button class="tab-button py-2 px-4 rounded-md font-medium" data-tab="llm-setup">LLM Setup</button>
+<button class="tab-button py-2 px-4 rounded-md font-medium" data-tab="backend">Backend (FastAPI)</button>
+<button class="tab-button py-2 px-4 rounded-md font-medium" data-tab="frontend">Frontend (React)</button>
+<button class="tab-button py-2 px-4 rounded-md font-medium" data-tab="testing">Testing & Usage</button>
+<button class="tab-button py-2 px-4 rounded-md font-medium" data-tab="advanced">Advanced Features</button>
+</nav>
+
+<main id="tab-content-container">
+<section id="introduction" class="tab-content active">
+<div class="content-card">
+<h2 class="section-title">🚀 Welcome to the Guide!</h2>
+<p class="text-slate-700 leading-relaxed">
+This interactive guide provides a comprehensive walkthrough for setting up your local GenAI chatbot for third-party vendor risk assessments. We'll cover each component, from setting up the local Large Language Model (LLM) to building the frontend interface, complete with all necessary code snippets and instructions.
+</p>
+<p class="text-slate-700 leading-relaxed mt-4">
+This version of the guide also incorporates **persistent chat history** for your chatbot, allowing it to remember past conversations within a session, and clarifies the use of a **pre-trained model** with **document upload (RAG)**.
+</p>
+<p class="text-slate-700 leading-relaxed mt-4">
+Use the tabs above to navigate through the different sections of the implementation process. Each section contains detailed steps, code examples, and explanations to help you build and run your chatbot successfully.
+</p>
+</div>
+</section>
+
+<section id="prerequisites" class="tab-content">
+<div class="content-card">
+<h2 class="section-title">1. Project Setup & Prerequisites</h2>
+<p class="text-slate-700 mb-4">Before you begin, ensure you have the following installed on your system:</p>
+<ul class="list-disc list-inside space-y-2 text-slate-700 mb-6">
+<li><strong>Python 3.8+</strong>: For the FastAPI backend.</li>
+<li><strong>Node.js & npm (or Yarn)</strong>: For the React frontend.</li>
+<li><strong>Git</strong>: For cloning repositories (if applicable, though not explicitly used for setup in this guide).</li>
+<li><strong>Ollama</strong>: For running the local LLM. You can download it from <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" class="text-sky-600 hover:text-sky-700 underline">ollama.com/download</a>.</li>
+</ul>
+<p class="text-slate-700 mb-2">Let's start by creating a project directory. Open your terminal and run:</p>
+<div class="command-container">
+<div class="command">mkdir vendor-risk-chatbot<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+<div class="command">cd vendor-risk-chatbot<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+</div>
+</div>
+</section>
+
+<section id="llm-setup" class="tab-content">
+<div class="content-card">
+<h2 class="section-title">2. Local LLM Setup (Ollama)</h2>
+<p class="text-slate-700 mb-4">Ollama simplifies running large language models locally. Follow these steps:</p>
+<h3 class="sub-section-title">Download & Install Ollama</h3>
+<p class="text-slate-700 mb-4">
+Go to <a href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" class="text-sky-600 hover:text-sky-700 underline">ollama.com/download</a> and follow the installation instructions for your operating system (macOS, Linux, Windows).
+</p>
+<h3 class="sub-section-title">Pull and Run the Mistral Model</h3>
+<p class="text-slate-700 mb-2">Once Ollama is installed, open your terminal and run the following commands. This will download the Mistral 7B model and start it. Ollama will automatically manage a server on <code>http://localhost:11434</code>.</p>
+<div class="command-container">
+<div class="command">ollama pull mistral<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+<div class="command">ollama run mistral <span class="text-slate-500 text-sm italic"># This starts the model. You can close this terminal window after it confirms the model is running; the FastAPI app will interact with the Ollama server.</span><button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+</div>
+<p class="text-slate-700 mt-3 text-sm">
+Note: The Ollama server typically runs in the background after the first `ollama run`. You can check running models with `ollama list`.
+</p>
+<p class="text-slate-700 mt-3">
+**Pre-trained Model Capability:** The Mistral model you pull is a pre-trained LLM. This means it already has a vast general knowledge base. When you interact with the chatbot without uploading a document, it will leverage this pre-trained knowledge to answer your questions.
+</p>
+</div>
+</section>
+
+<section id="backend" class="tab-content">
+<div class="content-card">
+<h2 class="section-title">3. Backend API (FastAPI)</h2>
+<p class="text-slate-700 mb-4">We'll create a FastAPI application to handle file uploads, extract text, interact with the local Ollama LLM, and now, **manage persistent chat history using SQLite**.</p>
+<p class="text-slate-700 mb-2">First, navigate into your project directory and create a backend folder:</p>
+<div class="command-container">
+<div class="command">cd vendor-risk-chatbot <span class="text-slate-500 text-sm italic"># If not already in this directory</span><button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+<div class="command">mkdir backend<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+<div class="command">cd backend<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+</div>
+
+<h3 class="sub-section-title">Install Python Dependencies</h3>
+<p class="text-slate-700 mb-2">Create a <code>requirements.txt</code> file in the <code>backend</code> directory with the following content:</p>
+<div class="code-block mb-4">
+<button class="copy-button" onclick="copyToClipboard(this.nextElementSibling)">Copy</button>
+<pre><code>fastapi
+uvicorn
+requests
+PyPDF2
+python-docx
+sentence-transformers # For optional embeddings
+uuid</code></pre>
+</div>
+<p class="text-slate-700 mb-2">Then, install these dependencies using pip:</p>
+<div class="command-container">
+<div class="command">pip install -r requirements.txt<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+</div>
+
+<h3 class="sub-section-title">Create Dummy Data</h3>
+<p class="text-slate-700 mb-2">Create a <code>dummy_data</code> subdirectory within your main <code>vendor-risk-chatbot</code> root directory (i.e., one level above the <code>backend</code> directory). Manually create the following files inside <code>dummy_data</code>:</p>
+
+<div class="mt-4">
+<button class="toggle-button py-2 px-3 rounded-md text-sm mb-2 w-full text-left" onclick="toggleContent('dummy-pdf')">
+📄 <strong><code>dummy_data/acme_corp_report.pdf</code> (PDF)</strong> - Click to Show/Hide Content
+</button>
+<div id="dummy-pdf" class="hidden p-3 border border-slate-300 rounded-md bg-slate-50">
+<p class="text-slate-600 text-sm mb-2"><strong>How to create:</strong> Copy the text below into a document editor (e.g., Word, Google Docs) and save it as a PDF named <code>acme_corp_report.pdf</code> in the <code>dummy_data</code> folder.</p>
+<div class="code-block !bg-slate-200 !text-slate-700 text-sm">
+<button class="copy-button !bg-slate-400" onclick="copyToClipboard(this.nextElementSibling)">Copy</button>
+<pre><code>Acme Corp Vendor Risk Assessment Report - 2024
+
+Summary: Acme Corp is a critical third-party vendor providing cloud infrastructure services.
+Recent assessments indicate a HIGH risk level due to several findings.
+
+Key Findings:
+1. **Past Data Breaches (2023):** Acme Corp experienced a significant data breach in Q3 2023, exposing customer data. Remediation efforts are ongoing, but full closure is pending.
+2. **Lack of SOC2 Certification:** Acme Corp does not currently hold SOC2 Type II certification, which is a key requirement for our data handling policies. They are in the process of obtaining it, expected Q4 2024.
+3. **Weak Access Controls:** Audit revealed several instances of over-privileged accounts and lack of multi-factor authentication (MFA) on critical systems.
+4. **Inadequate Incident Response Plan:** Their incident response plan lacks specific playbooks for ransomware attacks and data exfiltration scenarios.
+
+Recommendations:
+- Conduct a comprehensive penetration test.
+- Implement MFA across all access points.
+- Review and update incident response plan with detailed playbooks.
+- Expedite SOC2 certification.</code></pre>
+</div>
+</div>
+</div>
+
+<div class="mt-4">
+<button class="toggle-button py-2 px-3 rounded-md text-sm mb-2 w-full text-left" onclick="toggleContent('dummy-docx')">
+📄 <strong><code>dummy_data/vendor_x_audit_template.docx</code> (DOCX)</strong> - Click to Show/Hide Content
+</button>
+<div id="dummy-docx" class="hidden p-3 border border-slate-300 rounded-md bg-slate-50">
+<p class="text-slate-600 text-sm mb-2"><strong>How to create:</strong> Copy the text below into Microsoft Word (or a compatible editor) and save it as a DOCX file named <code>vendor_x_audit_template.docx</code> in the <code>dummy_data</code> folder.</p>
+<div class="code-block !bg-slate-200 !text-slate-700 text-sm">
+<button class="copy-button !bg-slate-400" onclick="copyToClipboard(this.nextElementSibling)">Copy</button>
+<pre><code>Security Audit Checklist - Vendor X (ISO 27001 Compliance)
+
+Section: A.5 Information Security Policies
+- Has Vendor X established a set of information security policies? (Yes/No)
+- Are these policies reviewed at planned intervals or if significant changes occur? (Yes/No)
+
+Section: A.6 Organization of Information Security
+- Are information security roles and responsibilities defined? (Yes/No)
+- Is there a formal process for contact with authorities? (Yes/No)
+
+Section: A.9 Access Control
+- Are access control policies implemented for networks and applications? (Yes/No)
+- Is multi-factor authentication (MFA) used for remote access? (Yes/No)
+
+Section: A.12 Operations Security
+- Is malware protection implemented and regularly updated? (Yes/No)
+- Are backups of information, software, and systems taken regularly? (Yes/No)
+
+Compliance Status:
+Vendor X shows compliance in A.5 and A.6, but gaps in A.9 (MFA not universal) and A.12 (backup frequency needs review).</code></pre>
+</div>
+</div>
+</div>
+
+<h3 class="sub-section-title">Create <code>main.py</code> (Updated for Chat History & SQLite)</h3>
+<p class="text-slate-700 mb-2">Create a file named <code>main.py</code> in your <code>backend</code> directory with the following Python code. Note the changes in the <code>Query</code> model, the <code>chat_endpoint</code> to handle chat history, and the new SQLite database integration.</p>
+<div class="code-block mb-4">
+<button class="copy-button" onclick="copyToClipboard(this.nextElementSibling)">Copy</button>
+<pre><code>from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+import requests
+import PyPDF2
+import docx
+import io
+import os
+import sqlite3
+import uuid # For generating unique session IDs
+
+from sentence_transformers import SentenceTransformer
+
+app = FastAPI()
+
+origins = [
+"http://localhost:3000",
+"http://127.0.0.1:3000",
+]
+
+app.add_middleware(
+CORSMiddleware,
+allow_origins=origins,
+allow_credentials=True,
+allow_methods=["*"],
+allow_headers=["*"],
+)
+
+try:
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+print("SentenceTransformer model loaded successfully.")
+except Exception as e:
+embedding_model = None
+print(f"Could not load SentenceTransformer model: {e}. Document embedding feature will be unavailable.")
+
+# --- SQLite Database Setup ---
+DATABASE_FILE = "chat_history.db"
+
+def init_db():
+conn = sqlite3.connect(DATABASE_FILE)
+cursor = conn.cursor()
+# Create chat_sessions table
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS chat_sessions (
+session_id TEXT PRIMARY KEY,
+created_at TEXT DEFAULT CURRENT_TIMESTAMP
+)
+""")
+# Create messages table
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS messages (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+session_id TEXT NOT NULL,
+role TEXT NOT NULL,
+content TEXT NOT NULL,
+timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id)
+)
+""")
+conn.commit()
+conn.close()
+
+# Initialize the database when the app starts
+@app.on_event("startup")
+async def startup_event():
+init_db()
+
+# --- Pydantic Models ---
+class Message(BaseModel):
+type: str # 'user' or 'bot'
+text: str
+
+class Query(BaseModel):
+prompt: str
+context: str = None
+session_id: str = None # New: Optional session ID
+# history: list[Message] = [] # Removed: Backend will fetch history from DB
+
+RISK_FRAMEWORK = """
+You are an AI assistant specializing in third-party vendor risk assessments.
+Your responses should be concise, accurate, and directly address the user's question,
+leveraging the provided context and risk frameworks.
+
+Consider the following standard risk frameworks:
+- NIST CSF Categories: Identify, Protect, Detect, Respond, Recover
+- ISO 27001 Annex A Categories: Information security policies, Organization of information security, Human resource security, Asset management, Access control, Cryptography, Physical and environmental security, Operations security, Communications security, System acquisition, development and maintenance, Supplier relationships, Information security incident management, Information security aspects of business continuity management, Compliance.
+"""
+
+@app.get("/")
+async def read_root():
+return {"message": "Welcome to the Vendor Risk Chatbot Backend!"}
+
+@app.post("/upload")
+async def upload_file_endpoint(file: UploadFile = File(...)):
+text = ""
+file_extension = os.path.splitext(file.filename)[1].lower()
+try:
+file_content = io.BytesIO(await file.read())
+if file_extension == ".pdf":
+reader = PyPDF2.PdfReader(file_content)
+text = "".join([page.extract_text() for page in reader.pages if page.extract_text()])
+elif file_extension == ".docx":
+doc = docx.Document(file_content)
+text = "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+else:
+raise HTTPException(status_code=400, detail="Unsupported file type. Only PDF and DOCX are allowed.")
+if not text.strip():
+raise HTTPException(status_code=422, detail="Could not extract text from the document. It might be an image-only PDF or corrupted.")
+return {"filename": file.filename, "text": text}
+except Exception as e:
+print(f"Error during file upload or processing: {e}")
+raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
+
+@app.post("/chat")
+async def chat_endpoint(query: Query):
+conn = sqlite3.connect(DATABASE_FILE)
+cursor = conn.cursor()
+
+current_session_id = query.session_id
+if not current_session_id:
+current_session_id = str(uuid.uuid4())
+cursor.execute("INSERT INTO chat_sessions (session_id) VALUES (?)", (current_session_id,))
+conn.commit()
+
+# Store user message
+cursor.execute("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
+(current_session_id, 'user', query.prompt))
+conn.commit()
+
+# Retrieve full history for the current session
+cursor.execute("SELECT role, content FROM messages WHERE session_id = ? ORDER BY timestamp ASC",
+(current_session_id,))
+db_history = cursor.fetchall()
+conn.close()
+
+ollama_messages = []
+
+# Add the core system instruction (RISK_FRAMEWORK)
+ollama_messages.append({"role": "system", "content": RISK_FRAMEWORK})
+
+# If document context is provided, add it as a system message
+if query.context:
+ollama_messages.append({"role": "system", "content": f"Here is relevant information extracted from a vendor report:\n---\n{query.context}\n---"})
+
+# Add previous chat history from the database
+for role, content in db_history:
+# Only include actual user/assistant turns for Ollama's /api/chat
+if role == 'user' or role == 'assistant':
+ollama_messages.append({"role": role, "content": content})
+
+# Add the current user prompt (already added to DB, now add to Ollama payload)
+# The last message in db_history should be the current user prompt
+# If db_history is empty, it means this is the very first message
+if not ollama_messages or ollama_messages[-1]['content'] != query.prompt:
+ollama_messages.append({"role": "user", "content": query.prompt})
+
+ollama_api_url = "http://localhost:11434/api/chat"
+payload = {
+"model": "mistral",
+"messages": ollama_messages,
+"stream": False
+}
+
+try:
+response = requests.post(ollama_api_url, json=payload, timeout=300)
+response.raise_for_status()
+ollama_response = response.json()
+generated_text = ollama_response.get('message', {}).get('content', 'No response generated by LLM.')
+
+# Store bot message
+conn = sqlite3.connect(DATABASE_FILE)
+cursor = conn.cursor()
+cursor.execute("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
+(current_session_id, 'assistant', generated_text))
+conn.commit()
+conn.close()
+
+return {"response": generated_text, "session_id": current_session_id}
+except requests.exceptions.ConnectionError:
+raise HTTPException(status_code=503, detail="Could not connect to Ollama. Is it running on http://localhost:11434?")
+except requests.exceptions.Timeout:
+raise HTTPException(status_code=504, detail="Ollama response timed out. The model might be taking too long or is not running efficiently.")
+except requests.exceptions.RequestException as e:
+raise HTTPException(status_code=500, detail=f"Error communicating with Ollama: {str(e)}")
+except Exception as e:
+raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
+@app.post("/embed")
+async def embed_text_endpoint(data: dict):
+text_to_embed = data.get("text")
+if not text_to_embed:
+raise HTTPException(status_code=400, detail="Text to embed is required.")
+if embedding_model is None:
+raise HTTPException(status_code=500, detail="Embedding model not loaded.")
+try:
+embedding = embedding_model.encode(text_to_embed).tolist()
+return {"embedding": embedding}
+except Exception as e:
+raise HTTPException(status_code=500, detail=f"Failed to generate embedding: {str(e)}")
+
+@app.get("/history/{session_id}")
+async def get_chat_history(session_id: str):
+conn = sqlite3.connect(DATABASE_FILE)
+cursor = conn.cursor()
+cursor.execute("SELECT role, content FROM messages WHERE session_id = ? ORDER BY timestamp ASC", (session_id,))
+history = [{"type": row[0], "text": row[1]} for row in cursor.fetchall()]
+conn.close()
+return {"history": history}
+</code></pre>
+</div>
+
+<h3 class="sub-section-title">Run the Backend</h3>
+<p class="text-slate-700 mb-2">Navigate to the <code>backend</code> directory in your terminal and run:</p>
+<div class="command-container">
+<div class="command">uvicorn main:app --reload --port 8000<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+</div>
+<p class="text-slate-700 mt-2">Your backend API should now be running on <code>http://localhost:8000</code>. A <code>chat_history.db</code> file will be created in your <code>backend</code> directory.</p>
+</div>
+</section>
+
+<section id="frontend" class="tab-content">
+<div class="content-card">
+<h2 class="section-title">4. Frontend (React + Tailwind)</h2>
+<p class="text-slate-700 mb-4">Now, let's set up the React application for the user interface. This version includes updates to manage the chat session ID and load/send chat history to the backend.</p>
+<p class="text-slate-700 mb-2">Navigate back to the root of your <code>vendor-risk-chatbot</code> directory:</p>
+<div class="command-container">
+<div class="command">cd .. <span class="text-slate-500 text-sm italic"># If you are in the backend directory</span><button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+</div>
+
+<h3 class="sub-section-title">Create React App and Install Tailwind CSS</h3>
+<div class="command-container">
+<div class="command">npx create-react-app frontend --template cra-template-pwa --use-npm<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+<div class="command">cd frontend<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+<div class="command">npm install -D tailwindcss postcss autoprefixer<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+<div class="command">npx tailwindcss init -p<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+</div>
+
+<p class="text-slate-700 my-2">Modify <code>tailwind.config.js</code> to include your source files:</p>
+<div class="code-block mb-4">
+<button class="copy-button" onclick="copyToClipboard(this.nextElementSibling)">Copy</button>
+<pre><code>/** @type {import('tailwindcss').Config} */
+module.exports = {
+content: [
+"./src/**/*.{js,jsx,ts,tsx}",
+],
+theme: {
+extend: {},
+},
+plugins: [],
+}</code></pre>
+</div>
+
+<p class="text-slate-700 my-2">Add Tailwind directives to <code>src/index.css</code> (replace existing content):</p>
+<div class="code-block mb-4">
+<button class="copy-button" onclick="copyToClipboard(this.nextElementSibling)">Copy</button>
+<pre><code>@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar styles for better UX */
+.custom-scrollbar::-webkit-scrollbar {
+width: 8px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+background: #f1f1f1;
+border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+background: #888;
+border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+background: #555;
+}</code></pre>
+</div>
+
+<h3 class="sub-section-title">Replace <code>src/App.js</code> (Updated for Chat History & Session Management)</h3>
+<p class="text-slate-700 mb-2">Delete the existing <code>src/App.js</code> (and <code>src/App.css</code> if present). Create a new <code>src/App.js</code> with the following React code. The <code>sendMessage</code> function now passes the current <code>sessionId</code> to the backend, and the component manages session state.</p>
+<div class="code-block mb-4" style="max-height: 500px; overflow-y: auto;">
+<button class="copy-button" onclick="copyToClipboard(this.nextElementSibling)">Copy</button>
+<pre><code>import { useState, useRef, useEffect } from 'react';
+
+export default function App() {
+const [messages, setMessages] = useState([]);
+const [input, setInput] = useState('');
+const [context, setContext] = useState('');
+const [fileName, setFileName] = useState('');
+const [uploading, setUploading] = useState(false);
+const [error, setError] = useState('');
+const [sessionId, setSessionId] = useState(null); // New state for session ID
+const fileInputRef = useRef(null);
+const messagesEndRef = useRef(null); // Ref for auto-scrolling chat
+
+// Scroll to the latest message whenever messages state changes
+useEffect(() => {
+messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+}, [messages]);
+
+// Load session ID from localStorage on component mount
+useEffect(() => {
+const storedSessionId = localStorage.getItem('chatSessionId');
+if (storedSessionId) {
+setSessionId(storedSessionId);
+// Fetch history for the loaded session
+fetchChatHistory(storedSessionId);
+}
+}, []);
+
+const fetchChatHistory = async (sId) => {
+try {
+const response = await fetch(\`http://localhost:8000/history/\${sId}\`);
+if (!response.ok) {
+throw new Error(\`Failed to fetch history: \${response.status}\`);
+}
+const data = await response.json();
+setMessages(data.history);
+} catch (err) {
+console.error('Error fetching chat history:', err);
+setError(\`Failed to load previous chat: \${err.message}\`);
+localStorage.removeItem('chatSessionId'); // Clear invalid session
+setSessionId(null);
+}
+};
+
+const handleFileUpload = async (event) => {
+const file = event.target.files[0];
+if (!file) {
+setError('No file selected.');
+return;
+}
+setError('');
+setUploading(true);
+setFileName(file.name);
+const formData = new FormData();
+formData.append('file', file);
+try {
+const response = await fetch('http://localhost:8000/upload', {
+method: 'POST',
+body: formData,
+});
+if (!response.ok) {
+const errorData = await response.json();
+throw new Error(errorData.detail || \`HTTP error! Status: \${response.status}\`);
+}
+const data = await response.json();
+setContext(data.text);
+setMessages((prev) => [
+...prev,
+{ type: 'system', text: \`Document "\${file.name}" uploaded. Extracted \${data.text.length} chars.\` },
+]);
+} catch (err) {
+console.error('Error uploading file:', err);
+setError(\`Upload failed: \${err.message}\`);
+setContext('');
+setFileName('');
+} finally {
+setUploading(false);
+event.target.value = null;
+}
+};
+
+const sendMessage = async () => {
+if (!input.trim()) {
+setError('Please enter a message.');
+return;
+}
+setError('');
+const userMessage = input;
+setInput('');
+
+// Add the current user message to the local state first
+setMessages((prev) => [...prev, { type: 'user', text: userMessage }]);
+
+try {
+const response = await fetch('http://localhost:8000/chat', {
+method: 'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify({ prompt: userMessage, context: context, session_id: sessionId }), // Pass session_id
+});
+if (!response.ok) {
+const errorData = await response.json();
+throw new Error(errorData.detail || \`HTTP error! Status: \${response.status}\`);
+}
+const data = await response.json();
+setMessages((prev) => [
+...prev,
+{ type: 'bot', text: data.response || 'No response from bot.' },
+]);
+// Update session ID if it's a new session
+if (data.session_id && data.session_id !== sessionId) {
+setSessionId(data.session_id);
+localStorage.setItem('chatSessionId', data.session_id);
+}
+} catch (err) {
+console.error('Error sending message:', err);
+setError(\`Chat error: \${err.message}\`);
+setMessages((prev) => prev.map((msg, idx) => idx === prev.length - 1 && msg.type === 'user' ? { ...msg, error: true } : msg));
+}
+};
+
+const handleKeyPress = (event) => {
+if (event.key === 'Enter' && !event.shiftKey) {
+event.preventDefault();
+sendMessage();
+}
+};
+
+const startNewChat = () => {
+setMessages([]);
+setInput('');
+setContext('');
+setFileName('');
+setError('');
+setSessionId(null); // Clear session ID
+localStorage.removeItem('chatSessionId'); // Remove from local storage
+setMessages((prev) => [...prev, { type: 'system', text: 'Started a new chat session.' }]);
+};
+
+return (
+&lt;div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-4 font-sans"&gt;
+&lt;div className="bg-white shadow-xl rounded-xl w-full max-w-3xl flex flex-col h-[90vh] md:h-[85vh] overflow-hidden"&gt;
+&lt;div className="bg-gradient-to-r from-sky-600 to-cyan-500 text-white p-5 rounded-t-xl flex items-center justify-between"&gt;
+&lt;h1 className="text-2xl font-bold flex items-center"&gt;
+&lt;svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 mr-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"&gt;&lt;path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"&gt;&lt;/path&gt;&lt;/svg&gt;
+Vendor Risk Chatbot
+&lt;/h1&gt;
+&lt;div className="flex items-center gap-2"&gt;
+&lt;a href="dummy_data/acme_corp_report.pdf" target="_blank" rel="noopener noreferrer" className="text-sm bg-white bg-opacity-25 hover:bg-opacity-30 px-3 py-1 rounded-full transition-colors"&gt;
+Sample PDF
+&lt;/a&gt;
+&lt;button onClick={startNewChat} className="text-sm bg-white bg-opacity-25 hover:bg-opacity-30 px-3 py-1 rounded-full transition-colors flex items-center gap-1"&gt;
+&lt;svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"&gt;&lt;path d="M12 20h9"&gt;&lt;/path&gt;&lt;path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"&gt;&lt;/path&gt;&lt;/svg&gt;
+New Chat
+&lt;/button&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+
+&lt;div className="p-4 border-b border-slate-200 flex flex-col md:flex-row items-center justify-between gap-3"&gt;
+&lt;input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".pdf,.docx" /&gt;
+&lt;button onClick={() => fileInputRef.current.click()} className="flex-shrink-0 bg-sky-500 hover:bg-sky-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md transition-colors flex items-center justify-center gap-2 w-full md:w-auto" disabled={uploading}&gt;
+&lt;svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"&gt;&lt;path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"&gt;&lt;/path&gt;&lt;polyline points="17 8 12 3 7 8"&gt;&lt;/polyline&gt;&lt;line x1="12" y1="3" x2="12" y2="15"&gt;&lt;/line&gt;&lt;/svg&gt;
+{uploading ? 'Uploading...' : 'Upload Document'}
+&lt;/button&gt;
+&lt;div className="flex-grow text-slate-600 text-sm truncate text-center md:text-left"&gt;
+{fileName ? (&lt;span className="font-medium text-sky-700"&gt;{fileName} {context && &lt;span className="text-slate-500"&gt;({context.length} chars)&lt;/span&gt;}&lt;/span&gt;) : 'Upload PDF/DOCX for context.'}
+&lt;/div&gt;
+{context && (
+&lt;button onClick={() => { setContext(''); setFileName(''); setMessages((prev) => [...prev, { type: 'system', text: 'Context cleared.' }]); }}
+className="flex-shrink-0 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-3 rounded-lg shadow-md transition-colors text-sm"&gt;
+Clear Context
+&lt;/button&gt;
+)}
+&lt;/div&gt;
+
+&lt;div className="flex-grow overflow-y-auto p-4 space-y-4 custom-scrollbar"&gt;
+{messages.length === 0 && !error && (
+&lt;div className="text-center text-slate-500 py-10"&gt;
+&lt;p className="mb-2"&gt;Upload a document or ask a general question.&lt;/p&gt;
+&lt;p&gt;E.g., "What are common vendor risks?"&lt;/p&gt;
+&lt;/div&gt;
+)}
+{messages.map((msg, index) => (
+&lt;div key={index} className={\`flex \${msg.type === 'user' ? 'justify-end' : 'justify-start'}\`}&gt;
+&lt;div className={\`max-w-[80%] p-3 rounded-xl shadow-sm \${
+msg.type === 'user' ? 'bg-sky-500 text-white rounded-br-none' :
+msg.type === 'bot' ? 'bg-slate-200 text-slate-800 rounded-bl-none' :
+'bg-amber-100 text-amber-800 text-sm italic' // System messages
+}\`}&gt;
+{msg.type === 'user' && &lt;div className="font-semibold mb-1"&gt;You:&lt;/div&gt;}
+{msg.type === 'bot' && &lt;div className="font-semibold mb-1"&gt;Bot:&lt;/div&gt;}
+&lt;div className="whitespace-pre-wrap"&gt;{msg.text}&lt;/div&gt;
+{msg.error && &lt;div className="text-red-700 text-xs mt-1"&gt;Error sending message.&lt;/div&gt;}
+&lt;/div&gt;
+&lt;/div&gt;
+))}
+&lt;div ref={messagesEndRef} /&gt;
+&lt;/div&gt;
+
+{error && (
+&lt;div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mx-4 mb-2 rounded-md" role="alert"&gt;
+&lt;p className="font-bold"&gt;Error&lt;/p&gt;
+&lt;p&gt;{error}&lt;/p&gt;
+&lt;/div&gt;
+)}
+
+&lt;div className="p-4 border-t border-slate-200 flex items-center gap-3 bg-slate-50 rounded-b-xl"&gt;
+&lt;textarea
+className="flex-grow border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-sky-400 focus:border-transparent outline-none resize-none h-14 custom-scrollbar"
+value={input}
+onChange={(e) => setInput(e.target.value)}
+onKeyPress={handleKeyPress}
+placeholder="Ask about vendor risks..."
+rows="1"
+style={{ minHeight: '50px', maxHeight: '120px' }}
+/&gt;
+&lt;button className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-3 px-5 rounded-lg shadow-md transition-colors flex-shrink-0 flex items-center justify-center gap-2" onClick={sendMessage} disabled={!input.trim()}&gt;
+&lt;svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"&gt;&lt;line x1="22" y1="2" x2="11" y2="13"&gt;&lt;/line&gt;&lt;polygon points="22 2 15 22 11 13 2 9 22 2"&gt;&lt;/polygon&gt;&lt;/svg&gt;
+Send
+&lt;/button&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+&lt;/div&gt;
+);
+}</code></pre>
+</div>
+
+<h3 class="sub-section-title">Run the Frontend</h3>
+<p class="text-slate-700 mb-2">Navigate to the <code>frontend</code> directory in your terminal and run:</p>
+<div class="command-container">
+<div class="command">npm start<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+</div>
+<p class="text-slate-700 mt-2">Your React app should open in your browser, usually at <code>http://localhost:3000</code>.</p>
+</div>
+</section>
+
+<section id="testing" class="tab-content">
+<div class="content-card">
+<h2 class="section-title">5. Bringing It All Together & Testing</h2>
+<p class="text-slate-700 mb-4">Follow these steps to get your chatbot up and running:</p>
+<ol class="list-decimal list-inside space-y-3 text-slate-700">
+<li><strong>Start Ollama:</strong> Ensure Ollama is running. Verify with <code>ollama list</code> in your terminal. If not, run <code>ollama run mistral</code> once to start the server.</li>
+<li><strong>Start FastAPI Backend:</strong> Open a terminal, navigate to <code>vendor-risk-chatbot/backend</code>, and run:
+<div class="command-container my-2">
+<div class="command">uvicorn main:app --reload --port 8000<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+</div>
+</li>
+<li><strong>Start React Frontend:</strong> Open another terminal, navigate to <code>vendor-risk-chatbot/frontend</code>, and run:
+<div class="command-container my-2">
+<div class="command">npm start<button class="copy-button" onclick="copyToClipboard(this)">Copy</button></div>
+</div>
+</li>
+</ol>
+<p class="text-slate-700 mt-4">Open your browser to <code>http://localhost:3000</code> to interact with the chatbot.</p>
+
+<h3 class="sub-section-title">Testing with Mock Data (with Persistent Chat History)</h3>
+<p class="text-slate-700 mb-2">Each time you open the browser or refresh, the chatbot will attempt to load the last active session's history. You can click "New Chat" to start a fresh conversation session.</p>
+<div class="mt-3">
+<strong class="text-slate-700">Upload <code>acme_corp_report.pdf</code>:</strong>
+<ul class="list-disc list-inside text-sm text-slate-600 mt-1 space-y-1">
+<li>Click "Upload Document" and select your <code>acme_corp_report.pdf</code>.</li>
+<li>A system message should confirm the upload.</li>
+<li><strong>Sample Query 1:</strong> "What risks does Acme Corp have according to the report?"</li>
+<li><strong>Expected Response 1:</strong> Summarizes risks like "past data breaches (2023), lack of SOC2 certification..."</li>
+<li><strong>Sample Query 2 (follow-up):</strong> "Can you suggest mitigation steps for the data breaches?"</li>
+<li><strong>Expected Response 2:</strong> The bot should now be able to suggest mitigation steps specifically for data breaches, leveraging the context from the previous turn and the document.</li>
+<li>Try refreshing the page or closing/reopening the browser. The conversation history for this session should persist.</li>
+</ul>
+</div>
+<div class="mt-3">
+<strong class="text-slate-700">Upload <code>vendor_x_audit_template.docx</code>:</strong>
+<ul class="list-disc list-inside text-sm text-slate-600 mt-1 space-y-1">
+<li>Click "New Chat" to start a new session.</li>
+<li>Upload <code>vendor_x_audit_template.docx</code>.</li>
+<li><strong>Sample Query 1:</strong> "What are the compliance gaps for Vendor X based on the audit template?"</li>
+<li><strong>Expected Response 1:</strong> Identifies gaps in "Access Control (MFA not universal)" and "Operations Security..."</li>
+<li><strong>Sample Query 2 (follow-up):</strong> "Tell me more about the access control issue."</li>
+<li><strong>Expected Response 2:</strong> The bot should elaborate on the MFA issue mentioned in the previous turn and the document.</li>
+</ul>
+</div>
+<div class="mt-3">
+<strong class="text-slate-700">General Query (without context):</strong>
+<ul class="list-disc list-inside text-sm text-slate-600 mt-1 space-y-1">
+<li>Click "New Chat" to start a new session.</li>
+<li><strong>Sample Query 1:</strong> "What is vendor risk assessment?"</li>
+<li><strong>Expected Response 1:</strong> Provides a general definition, guided by the <code>RISK_FRAMEWORK</code>.</li>
+<li><strong>Sample Query 2 (follow-up):</strong> "Why is it important?"</li>
+<li><strong>Expected Response 2:</strong> The bot should explain the importance of vendor risk assessment, building on its previous answer.</li>
+</ul>
+</div>
+</div>
+</section>
+
+<section id="advanced" class="tab-content">
+<div class="content-card">
+<h2 class="section-title">6. Advanced Features (Integration Details)</h2>
+<p class="text-slate-700 mb-4">The provided FastAPI <code>main.py</code> already includes setup for these advanced capabilities:</p>
+
+<h3 class="sub-section-title">A. Document Embeddings (<code>sentence-transformers</code>)</h3>
+<p class="text-slate-700 leading-relaxed">
+The <code>embedding_model</code> (<code>all-MiniLM-L6-v2</code>) is initialized in <code>main.py</code>. An <code>/embed</code> endpoint is available.
+While not directly used by the current frontend for chat, this is crucial for a future Retrieval-Augmented Generation (RAG) pipeline.
+In a RAG setup, you would:
+</p>
+<ol class="list-decimal list-inside space-y-1 text-slate-600 text-sm my-2">
+<li>Break down uploaded document text into smaller, meaningful chunks.</li>
+<li>Generate embeddings for each chunk using the <code>/embed</code> endpoint or directly with the model.</li>
+<li>Store these embeddings and their corresponding text chunks in a vector database (e.g., ChromaDB, FAISS, or even a simple in-memory dictionary for a PoC).</li>
+<li>When a user asks a question, embed the question.</li>
+<li>Use the question's embedding to find the most semantically similar document chunks from your vector database.</li>
+<li>Pass these relevant chunks as `context` to the LLM along with the user's prompt, leading to more accurate and contextually rich answers.</li>
+</ol>
+
+<h3 class="sub-section-title">B. Hybrid Prompting</h3>
+<p class="text-slate-700 leading-relaxed">
+This is already implemented in the <code>/chat</code> endpoint of your <code>main.py</code>.
+The <code>RISK_FRAMEWORK</code> constant (containing NIST CSF and ISO 27001 categories) is automatically prepended to the LLM's prompt.
+This ensures that the LLM's responses are guided by established risk assessment frameworks, even when specific document context is provided.
+This technique helps in generating more structured, relevant, and domain-specific answers for vendor risk assessment queries.
+</p>
+
+<h3 class="sub-section-title">C. Local Database for Chat History and Files (SQLite)</h3>
+<p class="text-slate-700 leading-relaxed">
+For local mode persistence, your backend now uses **SQLite**.
+</p>
+<ul class="list-disc list-inside space-y-1 text-slate-600 text-sm my-2">
+<li><strong>Chat History:</strong> All user and bot messages for a given session are stored in the <code>chat_history.db</code> file (created in your <code>backend</code> directory). When you refresh the browser, the frontend attempts to load the last active session's history. A "New Chat" button allows you to explicitly start a new, distinct conversation session.</li>
+<li><strong>Related Info Files (Extracted Text):</strong> While the current setup processes files in memory and passes the extracted text as context, for a more scalable RAG system, you would typically store the extracted text (or its embeddings) in this database (or a dedicated vector database) for efficient retrieval. The current database schema is designed for chat history, but could be extended for document metadata/text storage.</li>
+</ul>
+<p class="text-slate-700 leading-relaxed mt-2">
+SQLite is ideal for local development due to its file-based nature and ease of use. For production environments or multi-user scenarios, you would typically migrate to a more robust client-server database like PostgreSQL or MySQL.
+</p>
+</div>
+</section>
+</main>
+</div>
+
+<div id="toast" class="toast-message">Copied to clipboard!</div>
+
+<script>
+const tabButtons = document.querySelectorAll('.tab-button');
+const tabContents = document.querySelectorAll('.tab-content');
+const toast = document.getElementById('toast');
+let toastTimeout;
+
+function showToast() {
+if (toastTimeout) clearTimeout(toastTimeout);
+toast.classList.add('show');
+toastTimeout = setTimeout(() => {
+toast.classList.remove('show');
+}, 2000);
+}
+
+tabButtons.forEach(button => {
+button.addEventListener('click', () => {
+const targetTab = button.dataset.tab;
+
+tabButtons.forEach(btn => btn.classList.remove('active'));
+button.classList.add('active');
+
+tabContents.forEach(content => {
+if (content.id === targetTab) {
+content.classList.add('active');
+} else {
+content.classList.remove('active');
+}
+});
+document.getElementById('tab-content-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+});
+
+function copyToClipboard(elementOrText) {
+let textToCopy;
+if (typeof elementOrText === 'string') {
+textToCopy = elementOrText;
+} else if (elementOrText.tagName === 'PRE' || elementOrText.tagName === 'CODE') {
+textToCopy = elementOrText.innerText;
+} else {
+textToCopy = elementOrText.innerText.replace(/Copy$/, '').trim();
+}
+
+navigator.clipboard.writeText(textToCopy).then(() => {
+showToast();
+}).catch(err => {
+console.error('Failed to copy: ', err);
+alert('Failed to copy text. Please try manually.');
+});
+}
+
+function toggleContent(elementId) {
+const contentElement = document.getElementById(elementId);
+if (contentElement) {
+contentElement.classList.toggle('hidden');
+}
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+const firstTabButton = document.querySelector('.tab-button');
+const firstTabContent = document.querySelector('.tab-content');
+if (firstTabButton && firstTabContent) {
+firstTabButton.classList.add('active');
+firstTabContent.classList.add('active');
+}
+});
+</script>
+</body>
+</html>
